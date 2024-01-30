@@ -46,6 +46,14 @@ pub struct Args {
     /// Generowanie wizualizacji grafu
     #[arg(short = 'D', long, default_value_t = false)]
     dot: bool,
+
+    /// Własny User-Agent
+    #[arg(short = 'U', long)]
+    user_agent: Option<String>,
+
+    /// Czy uruchomić przeglądarkę w trybie headful
+    #[arg(short = 'H', long, default_value_t = false)]
+    headful: bool
 }
 
  
@@ -66,7 +74,7 @@ fn main() -> Result<()> {
     rt.block_on(async {
 
         // Inicjalizacja przeglądarki
-        create_browser().await.unwrap();
+        let handle = create_browser().await.unwrap();
 
         // Uruchomienie crawlera w zależności od wybranej strategii
         match args.strategy {
@@ -75,7 +83,8 @@ fn main() -> Result<()> {
         }
 
         // Zamknięcie przeglądarki
-        BROWSER.clone().lock().await.as_mut().unwrap().browser.close().await.unwrap()
+        BROWSER.clone().lock().await.as_mut().unwrap().close().await.unwrap();
+        handle.await.unwrap();
     });
              
     Ok(())

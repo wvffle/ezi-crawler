@@ -7,25 +7,28 @@ pub(crate) use chromiumoxide::browser::{Browser, BrowserConfig};
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
+use crate::ARGS;
+
 // Tworzymy statyczne odniesienie do przeglądarki
 lazy_static! {
-    pub static ref BROWSER: Arc<Mutex<Option<BrowserConnection>>> = Arc::from(Mutex::new(None));
-}
-
-
-// Struktura przechowująca połączenie z przeglądarką
-pub struct BrowserConnection {
-    handle: tokio::task::JoinHandle<()>,
-    pub browser: Browser
+    pub static ref BROWSER: Arc<Mutex<Option<Browser>>> = Arc::from(Mutex::new(None));
 }
  
 // Uruchamianie przeglądarki
-pub async fn create_browser() -> Result<()> {
-    let config = BrowserConfig::builder()
+pub async fn create_browser() -> Result<tokio::task::JoinHandle<()>> {
+    let mut config = BrowserConfig::builder()
         .disable_default_args()
-        .args(CHROME_ARGS)
-        // NOTE: Odpalamy w trybie headfull
-        .with_head()
+        .args(CHROME_ARGS);
+
+    if ARGS.headful {
+        config = config.with_head();
+    }
+
+    if let Some(ua) = ARGS.user_agent.as_ref() {
+        config = config.arg(format!("--user-agent={}", ua));
+    }
+
+    let config = config
         .enable_cache()
         .request_timeout(std::time::Duration::from_secs(30))
         .build().map_err(|e| eyre!(e))?;
@@ -42,19 +45,14 @@ pub async fn create_browser() -> Result<()> {
     });
 
     // Nadpisujemy statyczne odniesienie do przeglądarki
-    BROWSER.lock().await.replace(BrowserConnection {
-        handle,
-        browser
-    });
+    BROWSER.lock().await.replace(browser);
      
-    Ok(())
+    Ok(handle)
 }
 
 // Argumenty przeglądarki
 // https://github.com/a11ywatch/chrome/blob/main/src/main.rs#L13
 static CHROME_ARGS: [&'static str; 58] = [
-    //  NOTE:Odpalamy w trybie headfull
-    // "--headless",
     "--no-sandbox",
     "--no-first-run",
     "--hide-scrollbars",

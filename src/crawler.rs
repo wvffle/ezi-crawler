@@ -4,7 +4,6 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use chromiumoxide::Page;
 use futures::StreamExt;
 use derive_builder::Builder;
 
@@ -15,6 +14,7 @@ use petgraph::graphmap::DiGraphMap;
 use serde::Serialize;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::RwLock;
 use url::Url;
 
 use par_dfs::r#async::{Bfs, Dfs, Node, NodeStream};
@@ -23,6 +23,7 @@ use crate::{scrapper, ARGS};
 
 lazy_static! {
     static ref START_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+    static ref NODE_CACHE: Arc<RwLock<HashMap<String, CrawlNode>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
 // Definicja strategii przeszukiwania
@@ -64,7 +65,9 @@ struct CrawlNode {
     #[serde(skip)]
     links: Vec<String>,
 
-    content: Option<String>
+    title: Option<String>,
+    description: Option<String>,
+    content: Option<String>,
 }
 
 // Implementacja potrzebna do porównywania węzłów
@@ -82,16 +85,29 @@ impl Hash for CrawlNode {
 }
 
 // Tworzenie węzła na podstawie strony
-async fn create_node(page: Page, link: String) -> Result<CrawlNode> {
+async fn create_node(link: String) -> Result<CrawlNode> {
+    let cached = NODE_CACHE.read().await.get(&link).cloned();
+    if let Some(node) = cached {
+        println!("CACHE HIT: {}", link);
+        return Ok(node);
+    }
+
+    println!("CACHE MISS: {}", link);
+
+    let url = Url::parse(link.as_str())?;
+    let page = scrapper::get_page(&url).await?;
     let links = scrapper::get_links(&page).await?;
-    let content = scrapper::get_content(&page).await?;
+    let (title, description, content) = scrapper::get_content(&page).await?;
 
     let node = CrawlNodeBuilder::default()
-        .link(link)
+        .link(link.clone())
         .links(links)
+        .title(title)
+        .description(description)
         .content(content)
         .build()?;
 
+    NODE_CACHE.write().await.insert(link, node.clone());
     Ok(node)
 }
 
@@ -111,22 +127,11 @@ impl Node for CrawlNode {
             return Ok(Box::pin(futures::stream::empty().boxed()))
         }
 
-        // Otwieramy karty w Chromium dla wszystkich linków w danym node
-        let links = self.links.clone();
-        let pages = links.into_iter()
-            .map(|link| async {
-                let url = Url::parse(link.as_str()).unwrap();
-                (link, scrapper::get_page(&url).await.unwrap())
-            })
-            .collect::<Vec<_>>();
-
-        // Czekamy aż wszystkie karty się otworzą
-        let pages = futures::future::join_all(pages).await;
-
         // Tworzymy węzły dla każdej karty
-        let nodes = pages.into_iter()
-            .map(|(link, page)| {
-                tokio::task::spawn(create_node(page, link.to_string()))
+        let links = self.links.clone();
+        let nodes = links.into_iter()
+            .map(|link| {
+                tokio::task::spawn(create_node(link.to_string()))
             })
             .collect::<Vec<_>>();
 
@@ -180,8 +185,7 @@ pub async fn bfs () -> Result<()> {
     let max_depth: usize = args.max_depth.unwrap_or(u8::MAX).into();
 
     // Tworzymy kartę oraz węzeł dla korzenia
-    let page = scrapper::get_page(&url).await.unwrap();
-    let root = create_node(page, url.to_string()).await?;
+    let root = create_node(url.to_string()).await?;
 
     // Rozpoczynamy pomiar czasu dla timeoutu
     start_timer();
@@ -217,8 +221,7 @@ pub async fn dfs () -> Result<()> {
     let max_depth: usize = args.max_depth.unwrap_or(u8::MAX).into();
 
     // Tworzymy kartę oraz węzeł dla korzenia
-    let page = scrapper::get_page(&url).await.unwrap();
-    let root = create_node(page, url.to_string()).await?;
+    let root = create_node(url.to_string()).await?;
 
     // Rozpoczynamy pomiar czasu dla timeoutu
     start_timer();

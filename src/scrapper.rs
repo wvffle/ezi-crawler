@@ -6,7 +6,7 @@ use crate::{chrome::BROWSER, ARGS};
 
 // Tworzenie nowej karty przeglądarki
 pub async fn get_page (url: &Url) -> Result<Page> {
-    Ok(BROWSER.clone().lock().await.as_ref().unwrap().browser.new_page(url.as_str()).await?)
+    Ok(BROWSER.clone().lock().await.as_ref().unwrap().new_page(url.as_str()).await?)
 }
 
 // Pobieranie linków z karty przeglądarki
@@ -48,21 +48,49 @@ pub async fn get_links (page: &Page) -> Result<Vec<String>> {
 }
 
 // Pobieranie zawartości strony
-pub async fn get_content (page: &Page) -> Result<Option<String>> {
+pub async fn get_content (page: &Page) -> Result<(Option<String>, Option<String>, Option<String>)> {
     let args = ARGS.clone();
 
     // Jeżeli zapisujemy wyniki do CSV
     if args.csv {
-        // Pobieramy zawartość strony
-        let content = page.find_element("body").await?
-            .inner_text().await?
-            .unwrap_or_default()
-            .replace("\n", " ");
+        // Pobieramy tytuł strony
+        let mut title = match page.find_element("title").await {
+            Ok(title) => Some(title.inner_text().await?.unwrap_or_default().replace("\n", " ")),
+            _ => None
+        };
 
-        Ok(Some(content))
+        // Jeżeli nie ma tytułu, to pobieramy og:title (edge case, gdy studenci zamiast w HTML umieją w socjale)
+        if title.is_none() {
+            title = match page.find_element("meta[property=og:title]").await {
+            Ok(title) => Some(title.attribute("content").await?.unwrap_or_default().replace("\n", " ")),
+            _ => None
+            };
+        }
+
+        // Pobieramy opis strony
+        let mut description = match page.find_element("meta[name=description]").await {
+            Ok(description) => Some(description.attribute("content").await?.unwrap_or_default().replace("\n", " ")),
+            _ => None
+        };
+
+        // Jeżeli nie ma opisu, to pobieramy og:description
+        if description.is_none() {
+            description = match page.find_element("meta[property=og:description]").await {
+                Ok(description) => Some(description.attribute("content").await?.unwrap_or_default().replace("\n", " ")),
+                _ => None
+            };
+        }
+
+        // Pobieramy zawartość strony
+        let content = match page.find_element("body").await {
+            Ok(content) => Some(content.inner_text().await?.unwrap_or_default().replace("\n", " ")),
+            _ => None
+        };
+
+        Ok((title, description, content))
     } else {
         // Inaczej, zwracamy pustą zawartość, aby trzymać mniej danych
-        Ok(None)
+        Ok((None, None, None))
     }
 }
  
