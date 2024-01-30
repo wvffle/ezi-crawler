@@ -52,7 +52,7 @@ pub async fn get_content (page: &Page) -> Result<Option<String>> {
     let args = ARGS.clone();
 
     // Jeżeli zapisujemy wyniki do CSV
-    if args.csv.unwrap_or(false) {
+    if args.csv {
         // Pobieramy zawartość strony
         let content = page.find_element("body").await?
             .inner_text().await?

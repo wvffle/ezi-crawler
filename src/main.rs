@@ -32,8 +32,8 @@ pub struct Args {
     jobs: Option<u8>,
 
     /// Czy zapisywać wyniki do pliku CSV
-    #[arg(short, long)]
-    csv: Option<bool>,
+    #[arg(short, long, default_value_t = false)]
+    csv: bool,
 
     /// Timeout przeszukiwania w sekundach
     #[arg(short, long)]
@@ -43,9 +43,9 @@ pub struct Args {
     #[arg(short = 'd', long)]
     max_depth: Option<u8>,
 
-    // Generowanie wizualizacji grafu
-    #[arg(short, long)]
-    generate_visualization: Option<bool>,
+    /// Generowanie wizualizacji grafu
+    #[arg(short = 'D', long, default_value_t = false)]
+    dot: bool,
 }
 
  

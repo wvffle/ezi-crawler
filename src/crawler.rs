@@ -10,7 +10,7 @@ use derive_builder::Builder;
 
 use color_eyre::eyre::Result;
 use lazy_static::lazy_static;
-use petgraph::dot::Dot;
+use petgraph::dot::{Dot, Config};
 use petgraph::graphmap::DiGraphMap;
 use serde::Serialize;
 use tokio::fs::File;
@@ -250,7 +250,7 @@ pub async fn dfs () -> Result<()> {
 // Funkcja pomocnicza do zapisywania wyników do pliku CSV
 fn save_csv (nodes: &HashMap<String, CrawlNode>) {
     let args = ARGS.clone();
-    if args.csv.unwrap_or(false) {
+    if args.csv {
         let mut wtr = csv::Writer::from_path("out.csv").unwrap();
         for node in nodes.values() {
             wtr.serialize(node).unwrap();
@@ -263,7 +263,7 @@ fn save_csv (nodes: &HashMap<String, CrawlNode>) {
 // Funkcja pomocnicza do zapisywania wyników do pliku DOT
 async fn save_graph (nodes: HashMap<String, CrawlNode>) -> Result<()> {
     let args = ARGS.clone();
-    if args.generate_visualization.unwrap_or(false) {
+    if args.dot {
 
         // Rekonstrukcja grafu z hashmapy
         let mut graph = DiGraphMap::new();
@@ -274,9 +274,9 @@ async fn save_graph (nodes: HashMap<String, CrawlNode>) -> Result<()> {
         }
 
         // Zapis grafu do pliku DOT
-        let dot = Dot::new(&graph);
+        let dot = Dot::with_config(&graph, &[Config::EdgeNoLabel, Config::GraphContentOnly]);
         let mut file = File::create("out.dot").await?;
-        file.write_all(format!("{:?}", dot).as_bytes()).await?;
+        file.write_all(format!("digraph {{\nranksep = 8;\n{:?}\n}}", dot).as_bytes()).await?;
 
         eprintln!("Saved output to out.dot");
     }
