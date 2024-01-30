@@ -119,7 +119,7 @@ impl Node for CrawlNode {
     ) -> Result<NodeStream<Self, Self::Error>> {
         // Sprawdzamy, czy nie przekroczyliśmy timeoutu
         let elapsed = { START_TIME.lock().unwrap().unwrap().elapsed() };
-        if elapsed.as_secs() > ARGS.clone().timeout_secs.unwrap_or(u16::MAX).into() {
+        if elapsed.as_secs() > ARGS.clone().timeout_secs.into() {
             // Jeśli tak, to zwracamy pustego streama
             return Ok(Box::pin(futures::stream::empty().boxed()))
         }
@@ -183,7 +183,7 @@ fn start_timer () {
 pub async fn bfs () -> Result<()> {
     let args = ARGS.clone();
     let url = args.url.clone();
-    let max_depth: usize = args.max_depth.unwrap_or(u8::MAX).into();
+    let max_depth = args.max_depth as usize;
 
     // Tworzymy kartę oraz węzeł dla korzenia
     let root = create_node(url.to_string()).await?;
@@ -219,7 +219,7 @@ pub async fn bfs () -> Result<()> {
 pub async fn dfs () -> Result<()> {
     let args = ARGS.clone();
     let url = args.url.clone();
-    let max_depth: usize = args.max_depth.unwrap_or(u8::MAX).into();
+    let max_depth = args.max_depth as usize;
 
     // Tworzymy kartę oraz węzeł dla korzenia
     let root = create_node(url.to_string()).await?;

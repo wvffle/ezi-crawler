@@ -28,12 +28,12 @@ pub struct Args {
     strategy: CrawlStrategy,
 
     /// Timeout przeszukiwania w sekundach
-    #[arg(short, long)]
-    timeout_secs: Option<u16>,
+    #[arg(short, long, default_value_t = u16::MAX)]
+    timeout_secs: u16,
 
     /// Maksymalna głębokość przeszukiwania
-    #[arg(short = 'd', long)]
-    max_depth: Option<u8>,
+    #[arg(short = 'd', long, default_value_t = u32::MAX)]
+    max_depth: u32,
 
     /// Czy zapisywać wyniki do pliku out.csv
     #[arg(short, long, default_value_t = false)]
@@ -48,8 +48,8 @@ pub struct Args {
     user_agent: Option<String>,
 
     /// Maksymalna liczba wątków
-    #[arg(short, long)]
-    jobs: Option<u8>,
+    #[arg(short, long, default_value_t = 1)]
+    jobs: u8,
 
     /// Czy uruchomić przeglądarkę w trybie headful
     #[arg(short = 'H', long, default_value_t = false)]
@@ -75,7 +75,7 @@ fn main() -> Result<()> {
         .enable_all()
 
         // Ustawienie liczby
-        .worker_threads(args.jobs.unwrap_or(1) as usize)
+        .worker_threads(args.jobs as usize)
         .build()?;
 
     // Uruchomienie runtime
