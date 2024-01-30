@@ -20,6 +20,7 @@ Options:
   -U, --user-agent <USER_AGENT>      Własny User-Agent
   -j, --jobs <JOBS>                  Maksymalna liczba wątków
   -H, --headful                      Czy uruchomić przeglądarkę w trybie headful
+  -f, --fetch-chromium               Czy pobrać lokalną wersję Chromium
   -s, --silent                       Czy wyświetlać logi
   -h, --help                         Print help
   -V, --version                      Print version

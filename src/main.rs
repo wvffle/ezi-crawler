@@ -55,6 +55,10 @@ pub struct Args {
     #[arg(short = 'H', long, default_value_t = false)]
     headful: bool,
 
+    /// Czy pobrać lokalną wersję Chromium
+    #[arg(short, long, default_value_t = false)]
+    fetch_chromium: bool,
+
     /// Czy wyświetlać logi
     #[arg(short, long, default_value_t = false)]
     silent: bool,

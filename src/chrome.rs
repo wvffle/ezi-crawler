@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{sync::Arc, path::Path};
 
+use chromiumoxide::{BrowserFetcher, BrowserFetcherOptions};
 use color_eyre::{eyre::eyre, Result};
  
 use futures::StreamExt;
@@ -26,6 +27,23 @@ pub async fn create_browser() -> Result<tokio::task::JoinHandle<()>> {
 
     if let Some(ua) = ARGS.user_agent.as_ref() {
         config = config.arg(format!("--user-agent={}", ua));
+    }
+
+    if ARGS.fetch_chromium {
+        if !ARGS.silent {
+            eprintln!("Downloading Chromium...");
+        }
+
+        let download_path = Path::new("./chromium");
+        tokio::fs::create_dir_all(&download_path).await?;
+        let fetcher = BrowserFetcher::new(
+            BrowserFetcherOptions::builder()
+                .with_path(&download_path)
+                .build()?,
+        );
+
+        let info = fetcher.fetch().await?;
+        config = config.chrome_executable(info.executable_path);
     }
 
     let config = config
