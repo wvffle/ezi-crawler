@@ -1,0 +1,31 @@
+name: Rust Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build and Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: stable
+
+      - name: Build project
+        run: cargo build --release
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./target/release/ezi
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release_name: Release ${{ github.sha }}
