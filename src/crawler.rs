@@ -21,12 +21,14 @@ lazy_static! {
     static ref START_TIME: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
 }
 
+// Definicja strategii przeszukiwania
 #[derive(Clone, Copy, Debug)]
 pub enum CrawlStrategy {
     Bfs,
     Dfs
 }
 
+// Trait potrzebny do parsowania argumentów CLI
 impl Into<clap::builder::OsStr> for CrawlStrategy {
     fn into(self) -> clap::builder::OsStr {
         match self {
@@ -36,6 +38,7 @@ impl Into<clap::builder::OsStr> for CrawlStrategy {
     }
 }
 
+// Trait potrzebny do parsowania argumentów CLI
 impl FromStr for CrawlStrategy {
     type Err = color_eyre::Report;
 
@@ -49,12 +52,10 @@ impl FromStr for CrawlStrategy {
 }
 
 
+// Definicja węzła przeszukiwania
 #[derive(Clone, Debug, Builder, Serialize)]
 struct CrawlNode {
     link: String,
-
-    #[serde(skip)]
-    depth: usize,
 
     #[serde(skip)]
     links: Vec<String>,
@@ -62,21 +63,22 @@ struct CrawlNode {
     content: Option<String>
 }
 
+// Implementacja potrzebna do porównywania węzłów
+// Chcemy, żeby dwa węzły były równe, jeśli mają taki sam link
 impl Eq for CrawlNode {}
-
 impl PartialEq for CrawlNode {
     fn eq(&self, other: &Self) -> bool {
         self.link == other.link
     }
 }
-
 impl Hash for CrawlNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.link.hash(state);
     }
 }
 
-async fn get_node(page: Page, depth: usize, link: String) -> Result<CrawlNode> {
+// Tworzenie węzła na podstawie strony
+async fn create_node(page: Page, link: String) -> Result<CrawlNode> {
     let links = scrapper::get_links(&page).await?;
     let content = scrapper::get_content(&page).await?;
 
@@ -84,28 +86,29 @@ async fn get_node(page: Page, depth: usize, link: String) -> Result<CrawlNode> {
         .link(link)
         .links(links)
         .content(content)
-        .depth(depth)
         .build()?;
 
     Ok(node)
 }
 
+// Implementacja traitu potrzebnego do asynchronicznego przeszukiwania
 #[async_trait::async_trait]
 impl Node for CrawlNode {
     type Error = color_eyre::Report;
 
     async fn children(
         self: Arc<Self>,
-        depth: usize
+        _depth: usize
     ) -> Result<NodeStream<Self, Self::Error>> {
+        // Sprawdzamy, czy nie przekroczyliśmy timeoutu
         let elapsed = { START_TIME.lock().unwrap().unwrap().elapsed() };
         if elapsed.as_secs() > ARGS.clone().timeout_secs.unwrap_or(u16::MAX).into() {
+            // Jeśli tak, to zwracamy pustego streama
             return Ok(Box::pin(futures::stream::empty().boxed()))
         }
 
-        let depth = depth + 1;
+        // Otwieramy karty w Chromium dla wszystkich linków w danym node
         let links = self.links.clone();
-
         let pages = links.into_iter()
             .map(|link| async {
                 let url = Url::parse(link.as_str()).unwrap();
@@ -113,14 +116,20 @@ impl Node for CrawlNode {
             })
             .collect::<Vec<_>>();
 
+        // Czekamy aż wszystkie karty się otworzą
         let pages = futures::future::join_all(pages).await;
+
+        // Tworzymy węzły dla każdej karty
         let nodes = pages.into_iter()
             .map(|(link, page)| {
-                tokio::task::spawn(get_node(page, depth, link.to_string()))
+                tokio::task::spawn(create_node(page, link.to_string()))
             })
             .collect::<Vec<_>>();
 
+        // Czekamy aż wszystkie węzły się utworzą
         let nodes = futures::future::join_all(nodes).await;
+
+        // Zwracamy stream z utworzonymi węzłami
         let stream = futures::stream::iter(nodes)
             .map(|node| node.unwrap());
 
@@ -128,16 +137,21 @@ impl Node for CrawlNode {
     }
 }
 
+// Funkcja do wypisywania drzewa
 fn print_graph (link: String, nodes: &HashMap<String, CrawlNode>, max_depth: usize) {
     fn print_node (link: String, nodes: &HashMap<String, CrawlNode>, depth: usize, max_depth: usize, is_last: bool) {
+        // Ładnie formatujemy wypisywane drzewo
         let x = if depth > 0 { "│ ".repeat(depth - 1) } else { "".to_string() };
         let y = if depth == 0 { "" } else if is_last { "╰╴" } else { "├╴" };
         println!("{}{}{}", x, y, link);
 
+        // Jeśli przekroczyliśmy maksymalną głębokość, to kończymy
+        // Zabezpiecza to przed nieskończoną pętlą
         if depth >= max_depth {
             return;
         }
 
+        // Jeśli węzeł istnieje, to wypisujemy jego dzieci
         if let Some(node) = nodes.get(&link) {
             let last_link = node.links.last();
             for link in &node.links {
@@ -146,25 +160,33 @@ fn print_graph (link: String, nodes: &HashMap<String, CrawlNode>, max_depth: usi
         }
     }
 
+    // Wypisujemy korzeń
     print_node(link, nodes, 0, max_depth, false);
 }
 
+// Funkcja pomocnicza do mierzenia czasu
 fn start_timer () {
     START_TIME.lock().unwrap().replace(Instant::now());
 }
 
+// Strategia przeszukiwania BFS
 pub async fn bfs () -> Result<()> {
     let args = ARGS.clone();
     let url = args.url.clone();
     let max_depth: usize = args.max_depth.unwrap_or(u8::MAX).into();
 
+    // Tworzymy kartę oraz węzeł dla korzenia
     let page = scrapper::get_page(&url).await.unwrap();
-    let root = get_node(page, 1, url.to_string()).await?;
+    let root = create_node(page, url.to_string()).await?;
 
+    // Rozpoczynamy pomiar czasu dla timeoutu
     start_timer();
+
+    // Uruchamiamy przeszukiwanie BFS
     let bfs = Bfs::<CrawlNode>::new(root.clone(), max_depth - 1, false);
     let out: Vec<Result<CrawlNode>> = bfs.collect().await;
     
+    // Kolekcjonujemy wszystkie węzły w hashmapie link -> węzeł
     let mut map = HashMap::new();
     map.insert(root.link.clone(), root.clone());
     for node in out {
@@ -172,23 +194,33 @@ pub async fn bfs () -> Result<()> {
         map.insert(node.link.clone(), node);
     }
 
+    // Wypisujemy drzewo
     print_graph(root.link.clone(), &map, max_depth);
+
+    // Zapisujemy wyniki do pliku CSV
     save_csv(&map);
+
     Ok(())
 }
 
+// Strategia przeszukiwania DFS
 pub async fn dfs () -> Result<()> {
     let args = ARGS.clone();
     let url = args.url.clone();
     let max_depth: usize = args.max_depth.unwrap_or(u8::MAX).into();
 
+    // Tworzymy kartę oraz węzeł dla korzenia
     let page = scrapper::get_page(&url).await.unwrap();
-    let root = get_node(page, 1, url.to_string()).await?;
+    let root = create_node(page, url.to_string()).await?;
 
+    // Rozpoczynamy pomiar czasu dla timeoutu
     start_timer();
+
+    // Uruchamiamy przeszukiwanie DFS
     let dfs = Dfs::<CrawlNode>::new(root.clone(), max_depth - 1, false);
     let out: Vec<Result<CrawlNode>> = dfs.collect().await;
 
+    // Kolekcjonujemy wszystkie węzły w hashmapie link -> węzeł
     let mut map = HashMap::new();
     map.insert(root.link.clone(), root.clone());
     for node in out {
@@ -196,11 +228,16 @@ pub async fn dfs () -> Result<()> {
         map.insert(node.link.clone(), node);
     }
 
+    // Wypisujemy drzewo
     print_graph(root.link.clone(), &map, max_depth);
+
+    // Zapisujemy wyniki do pliku CSV
     save_csv(&map);
+
     Ok(())
 }
 
+// Funkcja pomocnicza do zapisywania wyników do pliku CSV
 fn save_csv (nodes: &HashMap<String, CrawlNode>) {
     let args = ARGS.clone();
     if args.csv.unwrap_or(false) {

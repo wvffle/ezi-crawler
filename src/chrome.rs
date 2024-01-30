@@ -7,20 +7,24 @@ pub(crate) use chromiumoxide::browser::{Browser, BrowserConfig};
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
+// Tworzymy statyczne odniesienie do przeglądarki
 lazy_static! {
     pub static ref BROWSER: Arc<Mutex<Option<BrowserConnection>>> = Arc::from(Mutex::new(None));
 }
 
 
+// Struktura przechowująca połączenie z przeglądarką
 pub struct BrowserConnection {
     handle: tokio::task::JoinHandle<()>,
     pub browser: Browser
 }
  
+// Uruchamianie przeglądarki
 pub async fn create_browser() -> Result<()> {
     let config = BrowserConfig::builder()
         .disable_default_args()
         .args(CHROME_ARGS)
+        // NOTE: Odpalamy w trybie headfull
         .with_head()
         .enable_cache()
         .request_timeout(std::time::Duration::from_secs(30))
@@ -28,7 +32,7 @@ pub async fn create_browser() -> Result<()> {
  
     let (browser, mut handler) = Browser::launch(config).await?;
  
-    // spawn a new task that continuously polls the handler
+    // Tworzymy nowy task, który cały czas będzie obsługiwał przeglądarkę
     let handle = tokio::task::spawn(async move {
         while let Some(h) = handler.next().await {
             if h.is_err() {
@@ -37,7 +41,7 @@ pub async fn create_browser() -> Result<()> {
         }
     });
 
-    
+    // Nadpisujemy statyczne odniesienie do przeglądarki
     BROWSER.lock().await.replace(BrowserConnection {
         handle,
         browser
@@ -46,8 +50,10 @@ pub async fn create_browser() -> Result<()> {
     Ok(())
 }
 
-/// static chrome arguments to start application ref [https://github.com/a11ywatch/chrome/blob/main/src/main.rs#L13]
+// Argumenty przeglądarki
+// https://github.com/a11ywatch/chrome/blob/main/src/main.rs#L13
 static CHROME_ARGS: [&'static str; 58] = [
+    //  NOTE:Odpalamy w trybie headfull
     // "--headless",
     "--no-sandbox",
     "--no-first-run",
