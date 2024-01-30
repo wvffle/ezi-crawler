@@ -21,7 +21,8 @@
     lib = nixpkgs.lib;
     
     libraries = with pkgs;[
-
+      pkg-config
+      openssl
     ];
     
 
@@ -32,7 +33,7 @@
 
   in {
     devShell = pkgs.mkShell {
-      buildInputs = packages;
+      buildInputs = libraries ++ packages;
 
       shellHook =
         ''

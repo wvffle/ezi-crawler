@@ -1,9 +1,23 @@
+use std::sync::Arc;
+
 use color_eyre::{eyre::eyre, Result};
  
 use futures::StreamExt;
-use chromiumoxide::browser::{Browser, BrowserConfig};
+pub(crate) use chromiumoxide::browser::{Browser, BrowserConfig};
+use lazy_static::lazy_static;
+use tokio::sync::Mutex;
 
-pub async fn create_browser() -> Result<(Browser, tokio::task::JoinHandle<()>)> {
+lazy_static! {
+    pub static ref BROWSER: Arc<Mutex<Option<BrowserConnection>>> = Arc::from(Mutex::new(None));
+}
+
+
+pub struct BrowserConnection {
+    handle: tokio::task::JoinHandle<()>,
+    pub browser: Browser
+}
+ 
+pub async fn create_browser() -> Result<()> {
     let config = BrowserConfig::builder()
         .disable_default_args()
         .args(CHROME_ARGS)
@@ -12,8 +26,7 @@ pub async fn create_browser() -> Result<(Browser, tokio::task::JoinHandle<()>)> 
         .request_timeout(std::time::Duration::from_secs(30))
         .build().map_err(|e| eyre!(e))?;
  
-    let (browser, mut handler) =
-        Browser::launch(config).await?;
+    let (browser, mut handler) = Browser::launch(config).await?;
  
     // spawn a new task that continuously polls the handler
     let handle = tokio::task::spawn(async move {
@@ -24,7 +37,13 @@ pub async fn create_browser() -> Result<(Browser, tokio::task::JoinHandle<()>)> 
         }
     });
 
-    Ok((browser, handle))
+    
+    BROWSER.lock().await.replace(BrowserConnection {
+        handle,
+        browser
+    });
+     
+    Ok(())
 }
 
 /// static chrome arguments to start application ref [https://github.com/a11ywatch/chrome/blob/main/src/main.rs#L13]
