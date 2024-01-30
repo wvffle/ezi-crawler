@@ -11,21 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Install Rust
-        uses: actions/setup-rust@v1
+      - uses: actions/checkout@master
+      - name: Compile and release
+        uses: rust-build/rust-build.action@v1.4.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          rust-version: stable
-
-      - name: Build project
-        run: cargo build --release
-
-      - name: Publish Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ./target/release/ezi
-          token: ${{ secrets.GITHUB_TOKEN }}
-          release_name: Release ${{ github.sha }}
+          RUSTTARGET: ${{ matrix.target }}
+          EXTRA_FILES: "README.md LICENSE"
