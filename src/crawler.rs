@@ -88,11 +88,8 @@ impl Hash for CrawlNode {
 async fn create_node(link: String) -> Result<CrawlNode> {
     let cached = NODE_CACHE.read().await.get(&link).cloned();
     if let Some(node) = cached {
-        println!("CACHE HIT: {}", link);
         return Ok(node);
     }
-
-    println!("CACHE MISS: {}", link);
 
     let url = Url::parse(link.as_str())?;
     let page = scrapper::get_page(&url).await?;
@@ -148,6 +145,10 @@ impl Node for CrawlNode {
 
 // Funkcja do wypisywania drzewa
 fn print_graph (link: String, nodes: &HashMap<String, CrawlNode>, max_depth: usize) {
+    if ARGS.silent {
+        return;
+    }
+
     fn print_node (link: String, nodes: &HashMap<String, CrawlNode>, depth: usize, max_depth: usize, is_last: bool) {
         // Ładnie formatujemy wypisywane drzewo
         let x = if depth > 0 { "│ ".repeat(depth - 1) } else { "".to_string() };
@@ -259,7 +260,10 @@ fn save_csv (nodes: &HashMap<String, CrawlNode>) {
             wtr.serialize(node).unwrap();
         }
         wtr.flush().unwrap();
-        eprintln!("Saved output to out.csv");
+
+        if !args.silent {
+            eprintln!("Saved output to out.csv");
+        }
     }
 }
 
@@ -281,7 +285,9 @@ async fn save_graph (nodes: HashMap<String, CrawlNode>) -> Result<()> {
         let mut file = File::create("out.dot").await?;
         file.write_all(format!("digraph {{\nranksep = 8;\n{:?}\n}}", dot).as_bytes()).await?;
 
-        eprintln!("Saved output to out.dot");
+        if !args.silent {
+            eprintln!("Saved output to out.dot");
+        }
     }
 
     Ok(())

@@ -19,21 +19,13 @@ lazy_static! {
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
 pub struct Args {
-    /// Strategia przeszukiwania
-    #[arg(short, long, default_value = CrawlStrategy::Bfs)]
-    strategy: CrawlStrategy,
-
     /// Adres URL do przeszukania
     #[arg(short, long)]
     url: Url,
 
-    /// Maksymalna liczba wątków
-    #[arg(short, long)]
-    jobs: Option<u8>,
-
-    /// Czy zapisywać wyniki do pliku CSV
-    #[arg(short, long, default_value_t = false)]
-    csv: bool,
+    /// Strategia przeszukiwania
+    #[arg(short = 'S', long, default_value = CrawlStrategy::Bfs)]
+    strategy: CrawlStrategy,
 
     /// Timeout przeszukiwania w sekundach
     #[arg(short, long)]
@@ -43,7 +35,11 @@ pub struct Args {
     #[arg(short = 'd', long)]
     max_depth: Option<u8>,
 
-    /// Generowanie wizualizacji grafu
+    /// Czy zapisywać wyniki do pliku out.csv
+    #[arg(short, long, default_value_t = false)]
+    csv: bool,
+
+    /// Czy zapisywać wizualizację grafu do pliku out.dot
     #[arg(short = 'D', long, default_value_t = false)]
     dot: bool,
 
@@ -51,9 +47,17 @@ pub struct Args {
     #[arg(short = 'U', long)]
     user_agent: Option<String>,
 
+    /// Maksymalna liczba wątków
+    #[arg(short, long)]
+    jobs: Option<u8>,
+
     /// Czy uruchomić przeglądarkę w trybie headful
     #[arg(short = 'H', long, default_value_t = false)]
-    headful: bool
+    headful: bool,
+
+    /// Czy wyświetlać logi
+    #[arg(short, long, default_value_t = false)]
+    silent: bool,
 }
 
  
