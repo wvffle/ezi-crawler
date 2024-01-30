@@ -42,6 +42,10 @@ pub struct Args {
     /// Maksymalna głębokość przeszukiwania
     #[arg(short = 'd', long)]
     max_depth: Option<u8>,
+
+    // Generowanie wizualizacji grafu
+    #[arg(short, long)]
+    generate_visualization: Option<bool>,
 }
 
  
